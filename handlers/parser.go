@@ -24,11 +24,6 @@ type Stat struct {
 	Status string `json:"status"`
 }
 
-// Matkul is Mata Kuliah
-var Matkul []MK
-var recurrence string
-var statusSuccess = &Stat{Status: "success"}
-
 func parse(str string) []MK {
 	var Matkul []MK
 	tokenizer := html.NewTokenizer(strings.NewReader(str))
@@ -84,13 +79,20 @@ func parse(str string) []MK {
 func handleHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	str := r.FormValue("html")
-	recurrence = r.FormValue("recurrence")
-	Matkul = parse(str)
-	if len(Matkul) > 0 {
-		// json.NewEncoder(w).Encode(Matkul)
+
+	sessions, err := store.Get(r, "parser-data")
+	if err != nil {
+		json.NewEncoder(w).Encode(&Stat{Status: err.Error()})
+		return
+	}
+	tmp := parse(str)
+	sessions.Values["matkul"] = tmp
+	sessions.Values["recurrence"] = r.FormValue("recurrence")
+	err = sessions.Save(r, w)
+
+	if len(tmp) > 0 && err == nil {
 		http.Redirect(w, r, "/auth/google/login", http.StatusFound)
 		return
 	}
-	http.Error(w, "Jadwal Kuliah not found!", http.StatusBadRequest)
-	json.NewEncoder(w).Encode(&Stat{Status: "failed"})
+	json.NewEncoder(w).Encode(&Stat{Status: err.Error()})
 }

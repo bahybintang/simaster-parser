@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -48,6 +49,7 @@ func generateStateOauthCookie(w http.ResponseWriter) string {
 }
 
 func oauthGoogleCallback(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	oauthstate, _ := r.Cookie("oauthstate")
 
 	if r.FormValue("state") != oauthstate.Value {
@@ -56,7 +58,7 @@ func oauthGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := addCalendarEvents(r.FormValue("code"))
+	err := addCalendarEvents(r.FormValue("code"), r)
 
 	if err != nil {
 		log.Println(err.Error())
@@ -64,11 +66,10 @@ func oauthGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(statusSuccess)
+	json.NewEncoder(w).Encode(&Stat{Status: "success"})
 }
 
-func addCalendarEvents(authCode string) error {
+func addCalendarEvents(authCode string, r *http.Request) error {
 	tok, err := googleOauthConfig.Exchange(context.TODO(), authCode)
 
 	if err != nil {
@@ -94,22 +95,41 @@ func addCalendarEvents(authCode string) error {
 	days["Sabtu,"] = "SA"
 	days["Minggu,"] = "SU"
 
-	for _, ev := range Matkul {
+	sessions, err := store.Get(r, "parser-data")
+	if err != nil {
+		return err
+	}
+
+	data := sessions.Values["matkul"]
+
+	Matkuls, ok := data.(*[]MK)
+
+	if !ok {
+		return errors.New("Failed to retrieve matkul")
+	}
+
+	recurrences, ok1 := sessions.Values["recurrence"].(string)
+	if !ok1 {
+		return errors.New("Failed to retrieve recurrence")
+	}
+
+	for _, ev := range *Matkuls {
 		// create Event
 		startEnd := strings.Split(ev.Jadwal, " ")
 		day := startEnd[0]
 		startEnd = strings.Split(startEnd[1], "-")
 		start := startEnd[0]
 		end := startEnd[1]
+		datenow := strings.Split(time.Now().String(), " ")[0]
 
 		event := &calendar.Event{
 			Summary:     ev.Nama + " (" + ev.Kode + ")",
 			Description: ev.Dosen,
 			Location:    ev.Ruang,
-			Start:       &calendar.EventDateTime{DateTime: "2019-06-28T" + start + ":00+07:00", TimeZone: "Asia/Jakarta"},
-			End:         &calendar.EventDateTime{DateTime: "2019-06-28T" + end + ":00+07:00", TimeZone: "Asia/Jakarta"},
+			Start:       &calendar.EventDateTime{DateTime: datenow + "T" + start + ":00+07:00", TimeZone: "Asia/Jakarta"},
+			End:         &calendar.EventDateTime{DateTime: datenow + "T" + end + ":00+07:00", TimeZone: "Asia/Jakarta"},
 			Reminders:   &calendar.EventReminders{UseDefault: true},
-			Recurrence:  []string{"RRULE:FREQ=WEEKLY;COUNT=" + recurrence + ";BYDAY=" + days[day]},
+			Recurrence:  []string{"RRULE:FREQ=WEEKLY;COUNT=" + recurrences + ";BYDAY=" + days[day]},
 		}
 
 		event, err := calsv.Events.Insert(calendarID, event).Do()
