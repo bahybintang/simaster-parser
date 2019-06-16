@@ -69,6 +69,39 @@ func oauthGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(&Stat{Status: "success"})
 }
 
+func findClosestDateOfDay(date string) time.Time {
+	var days map[string]int
+	days = map[string]int{}
+	days["Senin,"] = 1
+	days["Selasa,"] = 2
+	days["Rabu,"] = 3
+	days["Kamis,"] = 4
+	days["Jumat,"] = 5
+	days["Sabtu,"] = 6
+	days["Minggu,"] = 0
+
+	day := days[date]
+
+	dayNow := int(time.Now().Weekday())
+	diff := day - dayNow
+	var diffAbs int
+	var addDate int
+
+	if diff < 0 {
+		diffAbs *= -1
+	} else {
+		diffAbs = diff
+	}
+
+	if diffAbs < 5 {
+		addDate = diff
+	} else {
+		addDate = 7 - diffAbs
+	}
+
+	return time.Now().AddDate(0, 0, addDate)
+}
+
 func addCalendarEvents(authCode string, r *http.Request) error {
 	tok, err := googleOauthConfig.Exchange(context.TODO(), authCode)
 
@@ -120,14 +153,15 @@ func addCalendarEvents(authCode string, r *http.Request) error {
 		startEnd = strings.Split(startEnd[1], "-")
 		start := startEnd[0]
 		end := startEnd[1]
-		datenow := strings.Split(time.Now().String(), " ")[0]
+		date := findClosestDateOfDay(day)
+		dateEv := strings.Split(date.String(), " ")[0]
 
 		event := &calendar.Event{
 			Summary:     ev.Nama + " (" + ev.Kode + ")",
 			Description: ev.Dosen,
 			Location:    ev.Ruang,
-			Start:       &calendar.EventDateTime{DateTime: datenow + "T" + start + ":00+07:00", TimeZone: "Asia/Jakarta"},
-			End:         &calendar.EventDateTime{DateTime: datenow + "T" + end + ":00+07:00", TimeZone: "Asia/Jakarta"},
+			Start:       &calendar.EventDateTime{DateTime: dateEv + "T" + start + ":00+07:00", TimeZone: "Asia/Jakarta"},
+			End:         &calendar.EventDateTime{DateTime: dateEv + "T" + end + ":00+07:00", TimeZone: "Asia/Jakarta"},
 			Reminders:   &calendar.EventReminders{UseDefault: true},
 			Recurrence:  []string{"RRULE:FREQ=WEEKLY;COUNT=" + recurrences + ";BYDAY=" + days[day]},
 		}

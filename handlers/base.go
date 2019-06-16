@@ -10,14 +10,13 @@ import (
 
 var (
 	key   = []byte("secretwoy")
-	store = sessions.NewCookieStore(key)
+	store = sessions.NewFilesystemStore("", key)
 )
 
 // New is to create new Handler
 func New() http.Handler {
 	gob.Register(&MK{})
 	gob.Register(&[]MK{})
-	gob.Register(&map[string]interface{}{})
 	mux := mux.NewRouter()
 	mux.Handle("/", http.FileServer(http.Dir("public/")))
 
